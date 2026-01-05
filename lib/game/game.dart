@@ -1,81 +1,99 @@
 import 'package:flame/game.dart';
-import 'package:flame/components.dart';
 import 'package:flame/input.dart';
+import 'package:testLast-runner-05/analytics_service.dart';
+import 'package:testLast-runner-05/game_controller.dart';
+import 'package:testLast-runner-05/level_config.dart';
 import 'package:testLast-runner-05/player.dart';
 import 'package:testLast-runner-05/obstacle.dart';
-import 'package:testLast-runner-05/collectible.dart';
-import 'package:testLast-runner-05/analytics.dart';
-import 'package:testLast-runner-05/ads.dart';
-import 'package:testLast-runner-05/storage.dart';
+import 'package:testLast-runner-05/coin.dart';
+import 'package:testLast-runner-05/ui_overlay.dart';
 
-/// The main game class for the 'testLast-runner-05' game.
+/// The main FlameGame subclass for the 'testLast-runner-05' game.
 class testLast-runner-05Game extends FlameGame with TapDetector {
   /// The current game state.
   GameState _gameState = GameState.playing;
 
-  /// The player component.
+  /// The player character.
   late Player _player;
 
-  /// The list of obstacles.
-  final List<Obstacle> _obstacles = [];
+  /// The level configuration.
+  late LevelConfig _levelConfig;
 
-  /// The list of collectibles.
-  final List<Collectible> _collectibles = [];
-
-  /// The current score.
+  /// The game score.
   int _score = 0;
 
+  /// The number of lives the player has.
+  int _lives = 3;
+
+  /// The game controller.
+  late GameController _gameController;
+
   /// The analytics service.
-  final AnalyticsService _analytics = AnalyticsService();
+  late AnalyticsService _analyticsService;
 
-  /// The ads service.
-  final AdsService _ads = AdsService();
+  /// The UI overlay.
+  late UIOverlay _uiOverlay;
 
-  /// The storage service.
-  final StorageService _storage = StorageService();
-
-  /// Initializes the game.
   @override
   Future<void> onLoad() async {
-    await super.onLoad();
-    _loadLevel(1);
-  }
+    // Set up the camera and world
+    camera.viewport = FixedResolutionViewport(Vector2(720, 1280));
+    camera.followComponent(_player);
 
-  /// Loads a specific level.
-  void _loadLevel(int levelNumber) {
-    // Load level data from storage or other source
-    // Initialize player, obstacles, and collectibles
+    // Load the level configuration
+    _levelConfig = await LevelConfig.load();
+
+    // Create the player
     _player = Player();
-    _obstacles.addAll(_loadObstacles(levelNumber));
-    _collectibles.addAll(_loadCollectibles(levelNumber));
-    // Add components to the game world
     add(_player);
-    _obstacles.forEach(add);
-    _collectibles.forEach(add);
+
+    // Create the game controller
+    _gameController = GameController(this);
+    add(_gameController);
+
+    // Create the UI overlay
+    _uiOverlay = UIOverlay(this);
+    add(_uiOverlay);
+
+    // Initialize the analytics service
+    _analyticsService = AnalyticsService();
+    _analyticsService.logGameStart();
   }
 
-  /// Handles the tap input.
   @override
   void onTapDown(TapDownInfo info) {
-    super.onTapDown(info);
+    // Handle player jump input
     if (_gameState == GameState.playing) {
       _player.jump();
     }
   }
 
-  /// Updates the game state and components.
   @override
   void update(double dt) {
     super.update(dt);
+
+    // Update the game state
     switch (_gameState) {
       case GameState.playing:
-        _updatePlaying(dt);
+        // Update the player and check for collisions
+        _player.update(dt);
+        _checkCollisions();
+
+        // Update the score
+        _updateScore(dt);
+
+        // Check for level completion
+        if (_player.position.x >= _levelConfig.levelLength) {
+          _gameState = GameState.levelComplete;
+          _analyticsService.logLevelComplete();
+        }
         break;
       case GameState.paused:
-        // Handle paused state
+        // Pause the game
         break;
       case GameState.gameOver:
         // Handle game over state
+        _analyticsService.logLevelFail();
         break;
       case GameState.levelComplete:
         // Handle level complete state
@@ -83,60 +101,49 @@ class testLast-runner-05Game extends FlameGame with TapDetector {
     }
   }
 
-  /// Updates the game while in the playing state.
-  void _updatePlaying(double dt) {
-    _player.update(dt);
-    _updateObstacles(dt);
-    _updateCollectibles(dt);
-    _checkCollisions();
-    _updateScore(dt);
-  }
-
-  /// Updates the obstacles.
-  void _updateObstacles(double dt) {
-    for (final obstacle in _obstacles) {
-      obstacle.update(dt);
-    }
-  }
-
-  /// Updates the collectibles.
-  void _updateCollectibles(double dt) {
-    for (final collectible in _collectibles) {
-      collectible.update(dt);
-    }
-  }
-
-  /// Checks for collisions between the player and obstacles/collectibles.
   void _checkCollisions() {
-    // Check for collisions and update game state accordingly
-    if (_player.isColliding(_obstacles)) {
-      _gameOver();
+    // Check for collisions with obstacles
+    for (final obstacle in obstacles) {
+      if (_player.collides(obstacle)) {
+        _handlePlayerDeath();
+        return;
+      }
     }
-    if (_player.isCollecting(_collectibles)) {
-      _collectCoins();
+
+    // Check for collisions with coins
+    for (final coin in coins) {
+      if (_player.collides(coin)) {
+        _collectCoin(coin);
+      }
     }
   }
 
-  /// Updates the score.
+  void _handlePlayerDeath() {
+    // Decrement the player's lives
+    _lives--;
+
+    // If the player has no more lives, end the game
+    if (_lives == 0) {
+      _gameState = GameState.gameOver;
+    } else {
+      // Respawn the player
+      _player.respawn();
+    }
+  }
+
+  void _collectCoin(Coin coin) {
+    // Remove the collected coin from the game
+    remove(coin);
+
+    // Update the score
+    _score += coin.value;
+    _analyticsService.logCoinCollected();
+  }
+
   void _updateScore(double dt) {
-    // Update the score based on time elapsed or other factors
-    _score += (dt * 10).toInt();
-  }
-
-  /// Handles the game over state.
-  void _gameOver() {
-    _gameState = GameState.gameOver;
-    // Trigger game over sequence (display score, show retry/menu options, etc.)
-    _analytics.logGameOver(_score);
-    _ads.showInterstitialAd();
-  }
-
-  /// Handles the collection of coins.
-  void _collectCoins() {
-    // Increment the score, update UI, and trigger any other coin collection logic
-    _score += 10;
-    _analytics.logCoinCollected();
-    _storage.saveHighScore(_score);
+    // Increase the score over time
+    _score += (dt * _levelConfig.scorePerSecond).toInt();
+    _uiOverlay.updateScore(_score);
   }
 }
 

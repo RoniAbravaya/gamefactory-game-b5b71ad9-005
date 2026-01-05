@@ -1,49 +1,44 @@
 import 'package:flame/components.dart';
-import 'package:flame/geometry.dart';
-import 'package:flame/sprite.dart';
-import 'package:testLast-runner-05/player.dart';
+import 'package:flame/collisions.dart';
+import 'package:flutter/material.dart';
 
-/// Represents an obstacle in the runner game.
-class Obstacle extends PositionComponent with Hitbox, Collidable {
-  final Sprite _sprite;
-  final double _speed;
+class Obstacle extends PositionComponent with CollisionCallbacks {
+  final double moveSpeed;
+  final Vector2 direction;
 
-  /// Creates a new instance of the Obstacle component.
-  ///
-  /// [sprite] The sprite to be used for the obstacle.
-  /// [speed] The speed at which the obstacle moves.
-  Obstacle(this._sprite, this._speed) : super(size: Vector2.all(50.0));
+  Obstacle({
+    required Vector2 position,
+    required Vector2 size,
+    this.moveSpeed = 150,
+    this.direction = const Vector2(0, 1),
+  }) : super(
+          position: position,
+          size: size,
+          anchor: Anchor.center,
+        );
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    addHitbox(HitboxRectangle());
+    add(RectangleHitbox());
   }
 
   @override
   void update(double dt) {
     super.update(dt);
-    position.x -= _speed * dt;
-
-    // Respawn the obstacle if it goes off-screen
-    if (position.x < -size.x) {
-      position.x = game.size.x + size.x;
-      position.y = game.random.nextDouble() * (game.size.y - size.y);
-    }
-  }
-
-  @override
-  void onCollision(Set<Vector2> intersectionPoints, Collidable other) {
-    super.onCollision(intersectionPoints, other);
-    if (other is Player) {
-      // Damage the player on collision
-      other.takeDamage();
+    position += direction * moveSpeed * dt;
+    
+    if (position.y > 900 || position.y < -100 ||
+        position.x > 500 || position.x < -100) {
+      removeFromParent();
     }
   }
 
   @override
   void render(Canvas canvas) {
-    super.render(canvas);
-    _sprite.render(canvas, position: position, size: size);
+    canvas.drawRect(
+      size.toRect(),
+      Paint()..color = Colors.red,
+    );
   }
 }

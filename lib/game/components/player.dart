@@ -1,95 +1,102 @@
 import 'package:flame/components.dart';
-import 'package:flame/input.dart';
 import 'package:flame/sprite.dart';
+import 'package:testLast-runner-05/game_objects/obstacle.dart';
+import 'package:testLast-runner-05/game_objects/collectable.dart';
 
 /// The player character in the runner game.
-class Player extends SpriteAnimationComponent with HasGameRef, Collidable {
-  /// The player's current horizontal speed.
-  double xSpeed = 200;
+class Player extends SpriteAnimationComponent with HasGameRef {
+  /// The player's current horizontal position.
+  double _x = 0;
 
-  /// The player's current vertical speed.
-  double ySpeed = 0;
+  /// The player's current vertical position.
+  double _y = 0;
+
+  /// The player's current velocity.
+  Vector2 _velocity = Vector2.zero();
 
   /// The player's maximum jump height.
-  double maxJumpHeight = 300;
+  static const double _maxJumpHeight = 200;
 
-  /// The player's current health/lives.
-  int health = 3;
+  /// The player's jump velocity.
+  static const double _jumpVelocity = -800;
 
-  /// The player's current score.
-  int score = 0;
+  /// The player's gravity acceleration.
+  static const double _gravity = 2000;
 
-  /// The player's animation states.
-  late SpriteAnimation idleAnimation;
-  late SpriteAnimation runningAnimation;
-  late SpriteAnimation jumpingAnimation;
+  /// The player's health.
+  int _health = 3;
 
-  Player(Vector2 position, Vector2 size)
-      : super(
-          position: position,
-          size: size,
-          anchor: Anchor.center,
-        );
+  /// The player's invulnerability frames after taking damage.
+  int _invulnerabilityFrames = 0;
+
+  /// Constructs a new [Player] instance.
+  Player() : super(size: Vector2(50, 80));
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
-    // Load the player's animation sprites
+    // Load the player's sprite animation
     final spriteSheet = await gameRef.loadSpriteSheet(
       'player.png',
-      srcSize: Vector2(32, 32),
+      srcSize: Vector2(50, 80),
+      cols: 4,
+      rows: 3,
     );
-
-    idleAnimation = spriteSheet.createAnimation(row: 0, cols: 4, stepTime: 0.2);
-    runningAnimation = spriteSheet.createAnimation(row: 1, cols: 6, stepTime: 0.1);
-    jumpingAnimation = spriteSheet.createAnimation(row: 2, cols: 2, stepTime: 0.5);
-
-    // Set the initial animation
-    animation = idleAnimation;
+    animation = spriteSheet.createAnimation(row: 0, cols: 4, stepTime: 0.1);
   }
 
   @override
   void update(double dt) {
     super.update(dt);
 
-    // Update the player's position based on speed
-    position.x += xSpeed * dt;
-    position.y += ySpeed * dt;
+    // Update the player's position based on velocity and gravity
+    _x += _velocity.x * dt;
+    _y += _velocity.y * dt;
+    _velocity.y += _gravity * dt;
 
-    // Update the player's animation based on speed
-    if (ySpeed != 0) {
-      animation = jumpingAnimation;
-    } else if (xSpeed != 0) {
-      animation = runningAnimation;
-    } else {
-      animation = idleAnimation;
+    // Clamp the player's position to the screen bounds
+    _x = _x.clamp(0, gameRef.size.x - width);
+    _y = _y.clamp(0, gameRef.size.y - height);
+
+    // Decrement the invulnerability frames
+    if (_invulnerabilityFrames > 0) {
+      _invulnerabilityFrames--;
     }
   }
 
   @override
-  void onCollision(Set<Vector2> intersectionPoints, Collidable other) {
-    super.onCollision(intersectionPoints, other);
-
-    // Handle collision with obstacles
-    if (other is Obstacle) {
-      health--;
-      if (health <= 0) {
-        // Player has died, end the game
-        gameRef.pauseEngine();
-      }
+  void render(Canvas canvas) {
+    // Render the player's sprite animation
+    if (_invulnerabilityFrames > 0 && (_invulnerabilityFrames % 4) < 2) {
+      // Blink the player during invulnerability frames
+      return;
     }
+    super.render(canvas);
   }
 
   /// Handles the player's jump input.
   void jump() {
-    if (ySpeed == 0) {
-      ySpeed = -maxJumpHeight;
+    // Only allow the player to jump if they are on the ground
+    if (_velocity.y == 0) {
+      _velocity.y = _jumpVelocity;
     }
   }
 
-  /// Increments the player's score.
-  void incrementScore(int amount) {
-    score += amount;
+  /// Handles the player's collision with an obstacle.
+  void collideWithObstacle(Obstacle obstacle) {
+    // Reduce the player's health and set invulnerability frames
+    _health--;
+    _invulnerabilityFrames = 60;
   }
+
+  /// Handles the player's collision with a collectable.
+  void collectCollectable(Collectable collectable) {
+    // Increase the player's score or collect the item
+    gameRef.score++;
+    collectable.collected = true;
+  }
+
+  /// Returns the player's current health.
+  int get health => _health;
 }

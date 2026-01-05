@@ -1,51 +1,50 @@
 import 'package:flame/components.dart';
-import 'package:flame/effects.dart';
-import 'package:flame/game.dart';
-import 'package:flame/input.dart';
+import 'package:flame/collisions.dart';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
 
-/// A collectible item component for a runner game.
-class Collectible extends SpriteComponent with CollisionCallbacks {
-  final double scoreValue;
-  final AudioPlayer _audioPlayer;
+class Collectible extends PositionComponent with CollisionCallbacks {
+  final int value;
+  double _floatOffset = 0;
 
   Collectible({
     required Vector2 position,
-    required this.scoreValue,
-    required Sprite sprite,
-    required this.size,
-    AudioPlayer? audioPlayer,
-  })  : _audioPlayer = audioPlayer ?? AudioPlayer(),
-        super(
+    this.value = 10,
+  }) : super(
           position: position,
-          size: size,
-          sprite: sprite,
-        ) {
-    addEffect(RotateEffect.by(
-      2 * pi,
-      EffectController(
-        duration: 2,
-        infinite: true,
-      ),
-    ));
-    addEffect(MoveEffect.by(
-      Vector2(0, 0.5),
-      EffectController(
-        duration: 1,
-        infinite: true,
-        alternate: true,
-      ),
-    ));
+          size: Vector2(30, 30),
+          anchor: Anchor.center,
+        );
+
+  @override
+  Future<void> onLoad() async {
+    await super.onLoad();
+    add(CircleHitbox());
   }
 
   @override
-  void onCollision(Set<Vector2> intersectionPoints, PositionComponent other) {
-    super.onCollision(intersectionPoints, other);
-    if (other is Player) {
-      _audioPlayer.play(AssetSource('collect_sound.mp3'));
-      other.score += scoreValue;
+  void update(double dt) {
+    super.update(dt);
+    
+    position.y += 80 * dt;
+    
+    _floatOffset += dt * 5;
+    position.x += (0.5 * ((_floatOffset % 2) < 1 ? 1 : -1));
+    
+    if (position.y > 900) {
       removeFromParent();
     }
+  }
+
+  @override
+  void render(Canvas canvas) {
+    canvas.drawCircle(
+      Offset(size.x / 2, size.y / 2),
+      size.x / 2,
+      Paint()..color = Colors.amber,
+    );
+  }
+
+  void collect() {
+    removeFromParent();
   }
 }
